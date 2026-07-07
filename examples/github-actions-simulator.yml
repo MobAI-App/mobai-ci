@@ -1,0 +1,58 @@
+# MobAI CI — iOS simulator on a GitHub-hosted macOS runner (no tunnel, no host).
+#
+# Self-contained: the action installs mobai-ci and boots a test-ready simulator
+# (cached, so later runs boot fast), the runner builds the app while the
+# simulator comes up, then the flows run. This is the free local path — nothing
+# leaves the runner.
+#
+# Copy into .github/workflows/ in YOUR app repo and adjust the marked lines.
+
+name: Mobile smoke (iOS simulator)
+
+on:
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: macos-15 # macOS runner: has Xcode + simulators
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installs mobai-ci and starts a simulator booting in the background.
+      # Keep this BEFORE the build step: the boot overlaps the build, and the
+      # simulator cache works best before other Xcode tooling runs.
+      - uses: MobAI-App/mobai-ci@v1
+        with:
+          boot-sim: true # UDID lands in $MOBAI_SIM_UDID
+
+      # --- Build your app for the simulator (ADJUST scheme / project) ---
+      - name: Build app (Debug, simulator)
+        run: |
+          xcodebuild -scheme MyApp \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug -derivedDataPath build build
+          echo "APP_PATH=$(find build/Build/Products -name '*.app' -type d | head -1)" >> "$GITHUB_ENV"
+
+      # Installs the built .app on the simulator, then runs every flow under
+      # ./flows. --wait-device covers whatever boot time the build didn't.
+      - name: Run flows
+        run: |
+          mobai-ci test ./flows --app "$APP_PATH" \
+            --device "$MOBAI_SIM_UDID" --wait-device 4m --output reports
+
+      - uses: actions/upload-artifact@v4
+        if: always() # keep JUnit + failure screenshots/UI-trees even when red
+        with:
+          name: mobai-reports
+          path: reports
+
+  # Optional: split a large suite across runners. Each shard runs a slice.
+  # Uncomment and use `--shard ${{ matrix.shard }}/4`.
+  #
+  # smoke-sharded:
+  #   strategy:
+  #     matrix: { shard: [1, 2, 3, 4] }
+  #   runs-on: macos-15
+  #   steps:
+  #     - ... (same as above) ...
+  #     - run: mobai-ci test ./flows --app "$APP_PATH" --device "$MOBAI_SIM_UDID" --wait-device 4m --shard ${{ matrix.shard }}/4 --output reports

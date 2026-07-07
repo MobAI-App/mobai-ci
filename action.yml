@@ -1,0 +1,80 @@
+# Composite action so workflows can `uses: MobAI-App/mobai-ci@v1` instead of
+# curl-piping install.sh. Installs the pinned (or latest) release and puts the
+# binary on PATH for later steps.
+#
+# boot-sim mode (macOS runners): `mobai-ci sim boot` brings up a test-ready
+# iOS simulator and exposes its UDID as $MOBAI_SIM_UDID / outputs.sim-udid.
+# A cached image makes later runs boot much faster; the first run pays a
+# one-time preparation cost. Place this step BEFORE any other Xcode/simulator
+# step in the job, and pair it with `mobai-ci test --device "$MOBAI_SIM_UDID"
+# --wait-device 4m` so the boot overlaps your build/download steps.
+name: Setup mobai-ci
+description: Install mobai-ci, the MobAI mobile UI test runner, and add it to PATH
+branding:
+  icon: smartphone
+  color: purple
+
+inputs:
+  version:
+    description: "mobai-ci version to install (e.g. 0.1.0). Default: latest release."
+    required: false
+    default: ""
+  boot-sim:
+    description: "macOS only: 'true' boots a test-ready iOS simulator (cached for fast startup); UDID in $MOBAI_SIM_UDID and outputs.sim-udid."
+    required: false
+    default: ""
+  sim-cache-key:
+    description: "Extra cache-key component for the simulator cache; bump to start fresh."
+    required: false
+    default: "v1"
+
+outputs:
+  sim-udid:
+    description: "UDID of the booted simulator (empty unless boot-sim: true)."
+    value: ${{ steps.bootsim.outputs.udid }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install mobai-ci
+      shell: bash
+      env:
+        MOBAI_CI_VERSION: ${{ inputs.version }}
+        MOBAI_CI_BIN_DIR: ${{ runner.temp }}/mobai-ci-bin
+        # For install.sh's API fallback when resolving "latest" - anonymous
+        # api.github.com calls are rate-limited on shared runner IPs.
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        sh "$GITHUB_ACTION_PATH/install.sh"
+        echo "$MOBAI_CI_BIN_DIR" >> "$GITHUB_PATH"
+
+    - name: Restore simulator cache
+      if: inputs.boot-sim == 'true' && runner.os == 'macOS'
+      id: simcache
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/mobai-cache
+        # ImageOS/ImageVersion come from the runner image; a new image means a
+        # new Xcode, which needs a fresh cache.
+        key: mobai-sim-${{ env.ImageOS }}-${{ env.ImageVersion }}-${{ inputs.sim-cache-key }}
+
+    - name: Boot simulator
+      if: inputs.boot-sim == 'true' && runner.os == 'macOS'
+      id: bootsim
+      shell: bash
+      env:
+        MOBAI_CI_BIN_DIR: ${{ runner.temp }}/mobai-ci-bin
+        CACHE_DIR: ${{ runner.temp }}/mobai-cache
+      run: |
+        set -e
+        UDID=$("$MOBAI_CI_BIN_DIR/mobai-ci" sim boot --cache "$CACHE_DIR" | tail -1)
+        echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+        echo "MOBAI_SIM_UDID=$UDID" >> "$GITHUB_ENV"
+        echo "simulator: $UDID (booting in background)"
+
+    - name: Save simulator cache
+      if: inputs.boot-sim == 'true' && runner.os == 'macOS' && steps.simcache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/mobai-cache
+        key: mobai-sim-${{ env.ImageOS }}-${{ env.ImageVersion }}-${{ inputs.sim-cache-key }}

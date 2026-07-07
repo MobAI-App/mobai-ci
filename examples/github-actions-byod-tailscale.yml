@@ -1,0 +1,68 @@
+# MobAI CI — BYOD: drive a real device/simulator attached to YOUR machine, from
+# a GitHub-hosted runner, over a Tailscale tunnel. The build never leaves your
+# network; the runner just talks to your host's MobAI HTTP API.
+#
+# This is the tunnel template. Tailscale is one choice; cloudflared / SSH -R /
+# WireGuard work the same way (anything that makes the host reachable). For a
+# self-hosted runner on the same LAN as the host, you need NO tunnel - just set
+# MOBAI_ADDR to the host's LAN IP and delete the Tailscale step.
+#
+# ── One-time host setup (the machine with the device) ──
+#   1. Run the MobAI desktop app; attach the device (or boot a simulator).
+#   2. API settings: enable "Allow external connections" and Generate a token.
+#   3. Install Tailscale on the host so it joins your tailnet (MagicDNS name,
+#      e.g. "office-mac").
+#
+# ── Repo secrets (in your app repo) ──
+#   TS_OAUTH_CLIENT_ID / TS_OAUTH_SECRET  - a Tailscale OAuth client (ephemeral,
+#                                           tag:ci), from the Tailscale admin.
+#   MOBAI_API_KEY                         - a MobAI account API key (mobai_...),
+#                                           created in the app's API Keys dialog.
+#                                           Remote/BYOD runs are Pro-only.
+#   MOBAI_TOKEN                           - the host's API token (optional; only
+#                                           if you set one in API settings).
+#
+# ── Tailscale ACL ──  allow tag:ci to reach the host on :8686.
+
+name: Mobile smoke (BYOD via Tailscale)
+
+on:
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest # runner needs no device; the host has it
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Build your app (ADJUST). A real iOS device needs a signed .ipa; a
+      #     simulator host can take a .app (mobai-ci repackages it for upload). ---
+      - name: Build app
+        run: ./scripts/build-app.sh # produces build/MyApp.ipa (or .app / .apk)
+
+      # --- Join the team tailnet as an ephemeral, tagged node (auto-removed) ---
+      - name: Connect to tailnet
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          # Alternatively, an ephemeral auth key: authkey: ${{ secrets.TS_AUTHKEY }}
+
+      - name: Install mobai-ci
+        run: curl -fsSL https://raw.githubusercontent.com/MobAI-App/mobai-ci/main/install.sh | sh
+
+      # Uploads + installs the build on the host's device, then runs the flows
+      # there. Hash-skip avoids re-uploading an unchanged build on re-runs.
+      - name: Install app + run flows on the office device
+        env:
+          MOBAI_ADDR: http://office-mac:8686 # host's MagicDNS name (or LAN IP)
+          MOBAI_API_KEY: ${{ secrets.MOBAI_API_KEY }} # BYOD is Pro-only
+          MOBAI_TOKEN: ${{ secrets.MOBAI_TOKEN }} # optional
+        run: mobai-ci test ./flows --app build/MyApp.ipa --output reports
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobai-reports
+          path: reports
