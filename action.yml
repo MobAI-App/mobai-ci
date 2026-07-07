@@ -23,6 +23,10 @@ inputs:
     description: "macOS only: 'true' boots a test-ready iOS simulator (cached for fast startup); UDID in $MOBAI_SIM_UDID and outputs.sim-udid."
     required: false
     default: ""
+  boot-sim-background:
+    description: "With boot-sim: on a cache miss, boot immediately and build the reusable image in the background. Add the MobAI-App/mobai-ci/save action as a final job step so the image is saved once ready."
+    required: false
+    default: ""
   sim-device-type:
     description: "Simulator model for boot-sim (default iPhone 16 Pro)."
     required: false
@@ -72,7 +76,11 @@ runs:
       run: |
         VER=$("$MOBAI_CI_BIN_DIR/mobai-ci" version | awk '{print $2}')
         SLUG=$(echo "$DT-$RT" | tr -c 'A-Za-z0-9.' '-')
-        echo "key=mobai-sim-${ImageOS:-mac}-${ImageVersion:-0}-${VER}-${SLUG}-${EXTRA}" >> "$GITHUB_OUTPUT"
+        KEY="mobai-sim-${ImageOS:-mac}-${ImageVersion:-0}-${VER}-${SLUG}-${EXTRA}"
+        echo "key=$KEY" >> "$GITHUB_OUTPUT"
+        # For the companion save action (background mode saves at end of job).
+        echo "MOBAI_SIM_CACHE_KEY=$KEY" >> "$GITHUB_ENV"
+        echo "MOBAI_SIM_CACHE_DIR=${{ runner.temp }}/mobai-cache" >> "$GITHUB_ENV"
 
     - name: Restore simulator cache
       if: inputs.boot-sim == 'true' && runner.os == 'macOS'
@@ -93,14 +101,18 @@ runs:
         RT: ${{ inputs.sim-runtime }}
       run: |
         set -e
+        EXTRA_FLAGS=""
+        if [ "${{ inputs.boot-sim-background }}" = "true" ]; then EXTRA_FLAGS="--background"; fi
         UDID=$("$MOBAI_CI_BIN_DIR/mobai-ci" sim boot --cache "$CACHE_DIR" \
-          --device-type "$DT" --runtime "$RT" | tail -1)
+          --device-type "$DT" --runtime "$RT" $EXTRA_FLAGS | tail -1)
         echo "udid=$UDID" >> "$GITHUB_OUTPUT"
         echo "MOBAI_SIM_UDID=$UDID" >> "$GITHUB_ENV"
         echo "simulator: $UDID (booting in background)"
 
+    # In background mode the image may not exist yet - the companion save
+    # action (MobAI-App/mobai-ci/save) saves it as a final job step instead.
     - name: Save simulator cache
-      if: inputs.boot-sim == 'true' && runner.os == 'macOS' && steps.simcache.outputs.cache-hit != 'true'
+      if: inputs.boot-sim == 'true' && runner.os == 'macOS' && steps.simcache.outputs.cache-hit != 'true' && inputs.boot-sim-background != 'true'
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/mobai-cache

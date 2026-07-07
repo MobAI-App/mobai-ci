@@ -1,0 +1,45 @@
+# Companion to the main action's boot-sim-background mode: add as the LAST
+# step of the job. Waits for the background image build to finish, then saves
+# the simulator cache so later runs boot fast. Without this step a background
+# build's image is never saved and every run stays cold.
+name: Save mobai-ci simulator cache
+description: Wait for the background simulator image build and save it to the cache
+
+inputs:
+  wait:
+    description: "Max seconds to wait for the image build to finish."
+    required: false
+    default: "360"
+
+runs:
+  using: composite
+  steps:
+    - name: Wait for simulator image
+      id: waitimg
+      shell: bash
+      env:
+        WAIT: ${{ inputs.wait }}
+      run: |
+        DIR="${MOBAI_SIM_CACHE_DIR:-}"
+        if [ -z "$DIR" ]; then
+          echo "nothing to save (main mobai-ci action did not run with boot-sim)"
+          echo "ready=false" >> "$GITHUB_OUTPUT"; exit 0
+        fi
+        for i in $(seq 1 "$WAIT"); do
+          [ -f "$DIR/sim-image.tar" ] && break
+          sleep 1
+        done
+        if [ -f "$DIR/sim-image.tar" ]; then
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "image build did not finish in ${WAIT}s; skipping save (next run will rebuild)"
+          [ -f "$DIR/prepare.log" ] && tail -5 "$DIR/prepare.log"
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Save simulator cache
+      if: steps.waitimg.outputs.ready == 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ env.MOBAI_SIM_CACHE_DIR }}
+        key: ${{ env.MOBAI_SIM_CACHE_KEY }}
