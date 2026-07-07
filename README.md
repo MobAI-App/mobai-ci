@@ -56,20 +56,9 @@ with `boot-sim: true`). The boot continues in the background - pair it with
 `--wait-device` so it overlaps your build step. One running device is
 auto-detected; otherwise pass `--device`.
 
-First runs normally pay a one-time image preparation before tests start. To
-skip that wait, add `boot-sim-background: 'true'` (CLI: `--background`): the
-simulator boots immediately and the image builds in parallel; add the
-companion save step at the end of the job so the image is kept:
-
-```yaml
-- uses: MobAI-App/mobai-ci@v1
-  with:
-    boot-sim: true
-    boot-sim-background: 'true'
-# ... build + test steps ...
-- uses: MobAI-App/mobai-ci/save@v1 # last step: saves the image once ready
-  if: always()
-```
+First runs pay a one-time image preparation. To avoid it entirely, run
+`mobai-ci sim prepare --cache <dir>` from a small scheduled workflow so the
+cache is already warm when test runs need it.
 
 Exit codes: `0` all passed, `1` a test failed, `2` setup/usage error.
 
