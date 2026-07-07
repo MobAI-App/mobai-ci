@@ -23,6 +23,14 @@ inputs:
     description: "macOS only: 'true' boots a test-ready iOS simulator (cached for fast startup); UDID in $MOBAI_SIM_UDID and outputs.sim-udid."
     required: false
     default: ""
+  sim-device-type:
+    description: "Simulator model for boot-sim (default iPhone 16 Pro)."
+    required: false
+    default: "iPhone 16 Pro"
+  sim-runtime:
+    description: "iOS runtime id for boot-sim (default: newest installed)."
+    required: false
+    default: "latest"
   sim-cache-key:
     description: "Extra cache-key component for the simulator cache; bump to start fresh."
     required: false
@@ -48,15 +56,31 @@ runs:
         sh "$GITHUB_ACTION_PATH/install.sh"
         echo "$MOBAI_CI_BIN_DIR" >> "$GITHUB_PATH"
 
+    # ImageOS/ImageVersion are machine env vars on hosted runners; they are NOT
+    # visible to ${{ env.* }} inside a composite action, so read them in a
+    # shell step. The installed mobai-ci version joins the key so a new release
+    # (which may change what preparation puts in the cache) starts fresh.
+    - name: Compute simulator cache key
+      if: inputs.boot-sim == 'true' && runner.os == 'macOS'
+      id: simkey
+      shell: bash
+      env:
+        MOBAI_CI_BIN_DIR: ${{ runner.temp }}/mobai-ci-bin
+        DT: ${{ inputs.sim-device-type }}
+        RT: ${{ inputs.sim-runtime }}
+        EXTRA: ${{ inputs.sim-cache-key }}
+      run: |
+        VER=$("$MOBAI_CI_BIN_DIR/mobai-ci" version | awk '{print $2}')
+        SLUG=$(echo "$DT-$RT" | tr -c 'A-Za-z0-9.' '-')
+        echo "key=mobai-sim-${ImageOS:-mac}-${ImageVersion:-0}-${VER}-${SLUG}-${EXTRA}" >> "$GITHUB_OUTPUT"
+
     - name: Restore simulator cache
       if: inputs.boot-sim == 'true' && runner.os == 'macOS'
       id: simcache
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/mobai-cache
-        # ImageOS/ImageVersion come from the runner image; a new image means a
-        # new Xcode, which needs a fresh cache.
-        key: mobai-sim-${{ env.ImageOS }}-${{ env.ImageVersion }}-${{ inputs.sim-cache-key }}
+        key: ${{ steps.simkey.outputs.key }}
 
     - name: Boot simulator
       if: inputs.boot-sim == 'true' && runner.os == 'macOS'
@@ -65,9 +89,12 @@ runs:
       env:
         MOBAI_CI_BIN_DIR: ${{ runner.temp }}/mobai-ci-bin
         CACHE_DIR: ${{ runner.temp }}/mobai-cache
+        DT: ${{ inputs.sim-device-type }}
+        RT: ${{ inputs.sim-runtime }}
       run: |
         set -e
-        UDID=$("$MOBAI_CI_BIN_DIR/mobai-ci" sim boot --cache "$CACHE_DIR" | tail -1)
+        UDID=$("$MOBAI_CI_BIN_DIR/mobai-ci" sim boot --cache "$CACHE_DIR" \
+          --device-type "$DT" --runtime "$RT" | tail -1)
         echo "udid=$UDID" >> "$GITHUB_OUTPUT"
         echo "MOBAI_SIM_UDID=$UDID" >> "$GITHUB_ENV"
         echo "simulator: $UDID (booting in background)"
@@ -77,4 +104,4 @@ runs:
       uses: actions/cache/save@v4
       with:
         path: ${{ runner.temp }}/mobai-cache
-        key: mobai-sim-${{ env.ImageOS }}-${{ env.ImageVersion }}-${{ inputs.sim-cache-key }}
+        key: ${{ steps.simkey.outputs.key }}
