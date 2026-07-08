@@ -1,0 +1,63 @@
+# MobAI CI - run flows on a cloud device farm from a GitHub-hosted runner.
+#
+# No device on the runner: the action just installs mobai-ci, the runner builds
+# the app, and the flows run on a real device in the cloud. This example uses
+# BrowserStack; Sauce Labs (--cloud saucelabs, SAUCE_USERNAME + SAUCE_ACCESS_KEY)
+# and AWS Device Farm (--cloud awsdevicefarm, AWS_ACCESS_KEY_ID +
+# AWS_SECRET_ACCESS_KEY) work the same way with their own env vars.
+#
+# Cloud runs are Pro: set MOBAI_API_KEY, created in the app's API Keys dialog.
+#
+# -- Repo secrets (in your app repo) --
+#   MOBAI_API_KEY             - a MobAI account API key (mobai_...), from the
+#                               app's API Keys dialog. Cloud runs are Pro-only.
+#   BROWSERSTACK_USERNAME     - your BrowserStack credentials. For Sauce Labs use
+#   BROWSERSTACK_ACCESS_KEY     SAUCE_USERNAME/SAUCE_ACCESS_KEY; for AWS Device
+#                               Farm, AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.
+#
+# Copy into .github/workflows/ in YOUR app repo and adjust the marked lines.
+
+name: Mobile smoke (cloud device farm)
+
+on:
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest # runner needs no device; the device is in the cloud
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installs mobai-ci. No boot-sim / boot-emu here - the device is remote.
+      - uses: MobAI-App/mobai-ci@v1
+
+      # --- Build your app (ADJUST). A cloud iOS device needs a signed .ipa; a
+      #     cloud Android device takes an .apk. ---
+      - name: Build app
+        run: |
+          ./scripts/build-app.sh # produces build/MyApp.ipa (or .apk)
+          echo "APP_PATH=build/MyApp.ipa" >> "$GITHUB_ENV"
+
+      # Uploads + installs the build on a catalog device, then runs the flows.
+      # Browse devices with: mobai-ci devices --cloud browserstack
+      # --allure also writes reports/allure-results/.
+      - name: Run flows on BrowserStack
+        env:
+          MOBAI_API_KEY: ${{ secrets.MOBAI_API_KEY }} # cloud runs are Pro-only
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+        run: |
+          mobai-ci test ./flows --cloud browserstack \
+            --device "iPhone 15" --os "17" \
+            --app "$APP_PATH" --allure --output reports
+
+      - uses: actions/upload-artifact@v4
+        if: always() # keep JUnit + failure screenshots/UI-trees even when red
+        with:
+          name: mobai-reports
+          path: reports
+
+      # Optional: turn the Allure results into a browsable HTML report, then
+      # publish it (e.g. to GitHub Pages) or upload to Allure TestOps.
+      # - name: Publish Allure report
+      #   run: allure generate reports/allure-results -o site
