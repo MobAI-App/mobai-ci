@@ -1,4 +1,4 @@
-# MobAI CI — BYOD: drive a real device/simulator attached to YOUR machine, from
+# MobAI CI - BYOD: drive a real device/simulator attached to YOUR machine, from
 # a GitHub-hosted runner, over a Tailscale tunnel. The build never leaves your
 # network; the runner just talks to your host's MobAI HTTP API.
 #
