@@ -8,6 +8,13 @@
 # one-time preparation cost. Place this step BEFORE any other Xcode/simulator
 # step in the job, and pair it with `mobai-ci test --device "$MOBAI_SIM_UDID"
 # --wait-device 4m` so the boot overlaps your build/download steps.
+#
+# boot-emu mode (Linux or macOS runners): `mobai-ci emu boot` brings up a
+# test-ready Android emulator and exposes its serial as $MOBAI_EMU_SERIAL /
+# outputs.emu-serial. A cached image makes later runs resume in seconds; the
+# first run pays a one-time preparation cost. On Linux the action enables KVM
+# for you. Same idea as boot-sim: put it BEFORE your build and pair it with
+# `mobai-ci test --device "$MOBAI_EMU_SERIAL" --wait-device 4m`.
 name: Setup mobai-ci
 description: Install mobai-ci, the MobAI mobile UI test runner, and add it to PATH
 branding:
@@ -35,11 +42,26 @@ inputs:
     description: "Extra cache-key component for the simulator cache; bump to start fresh."
     required: false
     default: "v1"
+  boot-emu:
+    description: "'true' boots a test-ready Android emulator (Linux or macOS); serial in $MOBAI_EMU_SERIAL and outputs.emu-serial."
+    required: false
+    default: ""
+  emu-api:
+    description: "Android API level for boot-emu (default 35)."
+    required: false
+    default: "35"
+  emu-cache-key:
+    description: "Extra cache-key component for the emulator cache; bump to start fresh."
+    required: false
+    default: "v1"
 
 outputs:
   sim-udid:
     description: "UDID of the booted simulator (empty unless boot-sim: true)."
     value: ${{ steps.bootsim.outputs.udid }}
+  emu-serial:
+    description: "Serial of the booted Android emulator (empty unless boot-emu: true)."
+    value: ${{ steps.bootemu.outputs.serial }}
 
 runs:
   using: composite
@@ -105,3 +127,60 @@ runs:
       with:
         path: ${{ runner.temp }}/mobai-cache
         key: ${{ steps.simkey.outputs.key }}
+
+    # GitHub ubuntu runners ship /dev/kvm but its default perms block access;
+    # this udev rule opens it so the emulator can use hardware acceleration.
+    - name: Enable virtualization
+      if: inputs.boot-emu == 'true' && runner.os == 'Linux'
+      shell: bash
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+
+    # Same story as the simulator key: ImageOS/ImageVersion are machine env
+    # vars invisible to ${{ env.* }} here, and the mobai-ci version joins the
+    # key so a new release starts fresh. arch is included because the emulator
+    # image differs between amd64 and arm64 runners.
+    - name: Compute emulator cache key
+      if: inputs.boot-emu == 'true'
+      id: emukey
+      shell: bash
+      env:
+        MOBAI_CI_BIN_DIR: ${{ runner.temp }}/mobai-ci-bin
+        API: ${{ inputs.emu-api }}
+        EXTRA: ${{ inputs.emu-cache-key }}
+      run: |
+        VER=$("$MOBAI_CI_BIN_DIR/mobai-ci" version | awk '{print $2}')
+        ARCH=$(uname -m)
+        echo "key=mobai-emu-${ImageOS:-os}-${ImageVersion:-0}-${VER}-api${API}-${ARCH}-${EXTRA}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore emulator cache
+      if: inputs.boot-emu == 'true'
+      id: emucache
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/mobai-emu-cache
+        key: ${{ steps.emukey.outputs.key }}
+
+    - name: Boot emulator
+      if: inputs.boot-emu == 'true'
+      id: bootemu
+      shell: bash
+      env:
+        MOBAI_CI_BIN_DIR: ${{ runner.temp }}/mobai-ci-bin
+        CACHE_DIR: ${{ runner.temp }}/mobai-emu-cache
+        API: ${{ inputs.emu-api }}
+      run: |
+        set -e
+        SERIAL=$("$MOBAI_CI_BIN_DIR/mobai-ci" emu boot --cache "$CACHE_DIR" \
+          --api "$API" | tail -1)
+        echo "serial=$SERIAL" >> "$GITHUB_OUTPUT"
+        echo "MOBAI_EMU_SERIAL=$SERIAL" >> "$GITHUB_ENV"
+        echo "emulator: $SERIAL (booting in background)"
+
+    - name: Save emulator cache
+      if: inputs.boot-emu == 'true' && steps.emucache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/mobai-emu-cache
+        key: ${{ steps.emukey.outputs.key }}

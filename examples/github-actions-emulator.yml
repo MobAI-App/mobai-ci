@@ -1,0 +1,55 @@
+# MobAI CI - Android emulator on a GitHub-hosted Linux runner (no tunnel, no host).
+#
+# Self-contained: the action installs mobai-ci and boots a test-ready emulator
+# (cached, so later runs resume in seconds), the runner builds the app while the
+# emulator comes up, then the flows run. This is the free local path - nothing
+# leaves the runner.
+#
+# Copy into .github/workflows/ in YOUR app repo and adjust the marked lines.
+
+name: Mobile smoke (Android emulator)
+
+on:
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest # Linux runner: the action enables KVM for you
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installs mobai-ci and starts an emulator booting in the background.
+      # Keep this BEFORE the build step: the boot overlaps the build.
+      - uses: MobAI-App/mobai-ci@v1
+        with:
+          boot-emu: true # serial lands in $MOBAI_EMU_SERIAL
+
+      # --- Build your app (ADJUST for your Gradle setup) ---
+      - name: Build app
+        run: |
+          ./gradlew assembleDebug
+          echo "APP_PATH=app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
+
+      # Installs the built .apk on the emulator, then runs every flow under
+      # ./flows. --wait-device covers whatever boot time the build didn't.
+      - name: Run flows
+        run: |
+          mobai-ci test ./flows --app "$APP_PATH" \
+            --device "$MOBAI_EMU_SERIAL" --wait-device 4m --output reports
+
+      - uses: actions/upload-artifact@v4
+        if: always() # keep JUnit + failure screenshots/UI-trees even when red
+        with:
+          name: mobai-reports
+          path: reports
+
+  # Optional: split a large suite across runners. Each shard runs a slice.
+  # Uncomment and use `--shard ${{ matrix.shard }}/4`.
+  #
+  # smoke-sharded:
+  #   strategy:
+  #     matrix: { shard: [1, 2, 3, 4] }
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - ... (same as above) ...
+  #     - run: mobai-ci test ./flows --app "$APP_PATH" --device "$MOBAI_EMU_SERIAL" --wait-device 4m --shard ${{ matrix.shard }}/4 --output reports

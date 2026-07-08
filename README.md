@@ -34,6 +34,7 @@ mobai-ci install <app>         # install a build on the target device
 mobai-ci devices               # list reachable devices
 mobai-ci validate <path...>    # parse flows, no device
 mobai-ci sim boot              # boot a test-ready iOS simulator (macOS), print its UDID
+mobai-ci emu boot              # boot a test-ready Android emulator (Linux/macOS), print its serial
 mobai-ci version
 ```
 
@@ -56,6 +57,12 @@ with `boot-sim: true`). The boot continues in the background - pair it with
 `--wait-device` so it overlaps your build step. One running device is
 auto-detected; otherwise pass `--device`.
 
+Android is the same flow with `mobai-ci emu boot`: the action input
+`boot-emu: true` brings up an emulator and puts its serial in
+`$MOBAI_EMU_SERIAL`. The first run prepares the image (one-time); later runs
+resume in seconds via the emulator's Quick Boot. Linux runners need KVM, which
+the action enables automatically.
+
 First runs pay a one-time image preparation. To avoid it entirely, run
 `mobai-ci sim prepare --cache <dir>` from a small scheduled workflow so the
 cache is already warm when test runs need it.
@@ -65,6 +72,7 @@ Exit codes: `0` all passed, `1` a test failed, `2` setup/usage error.
 ## Examples
 
 - [`examples/github-actions-simulator.yml`](./examples/github-actions-simulator.yml): iOS simulator on a macOS runner (local, free).
+- [`examples/github-actions-emulator.yml`](./examples/github-actions-emulator.yml): Android emulator on a Linux runner (local, free).
 - [`examples/github-actions-byod-tailscale.yml`](./examples/github-actions-byod-tailscale.yml): drive a device on your own machine over a Tailscale tunnel (BYOD, Pro).
 
 ## Artifacts
