@@ -30,7 +30,7 @@ GitHub Actions:
 Anywhere else:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/MobAI-App/mobai-ci/main/install.sh | sh
+curl -fsSL https://mobai.run/ci/install.sh | sh
 ```
 
 Pin a version with `MOBAI_CI_VERSION=x.y.z`. Override the install dir with
@@ -232,7 +232,7 @@ Then in the job:
     oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
     oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
     tags: tag:ci
-- run: curl -fsSL https://raw.githubusercontent.com/MobAI-App/mobai-ci/main/install.sh | sh
+- run: curl -fsSL https://mobai.run/ci/install.sh | sh
 - name: Run flows on the office device
   env:
     MOBAI_ADDR: http://office-mac:8686              # host's MagicDNS name or LAN IP

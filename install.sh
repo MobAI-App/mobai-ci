@@ -1,7 +1,7 @@
 #!/bin/sh
 # mobai-ci installer.
 #
-#   curl -fsSL https://raw.githubusercontent.com/MobAI-App/mobai-ci/main/install.sh | sh
+#   curl -fsSL https://mobai.run/ci/install.sh | sh
 #
 # Env overrides:
 #   MOBAI_CI_VERSION   version to install (e.g. 0.1.0); default: latest
