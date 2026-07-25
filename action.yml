@@ -38,6 +38,10 @@ inputs:
     description: "iOS runtime id for boot-sim (default: newest installed)."
     required: false
     default: "latest"
+  sim-slim:
+    description: "Path to a simslim profile file (see https://github.com/MobAI-App/simslim). Turns off the iOS background services it names, so one machine can host several simulators. Applied once, while the cached image is built."
+    required: false
+    default: ""
   sim-cache-key:
     description: "Extra cache-key component for the simulator cache; bump to start fresh."
     required: false
@@ -82,6 +86,11 @@ runs:
     # visible to ${{ env.* }} inside a composite action, so read them in a
     # shell step. The installed mobai-ci version joins the key so a new release
     # (which may change what preparation puts in the cache) starts fresh.
+    #
+    # sim-slim joins it too, and must: the cache is only saved on a miss, so if
+    # an edited profile kept the same key, the restore would hit with the old
+    # image, mobai-ci would build the new one, and the save would be skipped -
+    # leaving every later run to rebuild from scratch, forever.
     - name: Compute simulator cache key
       if: inputs.boot-sim == 'true' && runner.os == 'macOS'
       id: simkey
@@ -91,10 +100,22 @@ runs:
         DT: ${{ inputs.sim-device-type }}
         RT: ${{ inputs.sim-runtime }}
         EXTRA: ${{ inputs.sim-cache-key }}
+        SLIM: ${{ inputs.sim-slim }}
       run: |
+        set -e
         VER=$("$MOBAI_CI_BIN_DIR/mobai-ci" version | awk '{print $2}')
         SLUG=$(echo "$DT-$RT" | tr -c 'A-Za-z0-9.' '-')
-        echo "key=mobai-sim-${ImageOS:-mac}-${ImageVersion:-0}-${VER}-${SLUG}-${EXTRA}" >> "$GITHUB_OUTPUT"
+        # Empty for a stock boot, so the key stays exactly what earlier versions
+        # produced and existing caches keep hitting.
+        SLIMTAG=""
+        if [ -n "$SLIM" ]; then
+          if [ ! -f "$SLIM" ]; then
+            echo "sim-slim: no such file: $SLIM (path is relative to the workspace; did you run actions/checkout first?)" >&2
+            exit 1
+          fi
+          SLIMTAG="-slim$(shasum -a 256 "$SLIM" | cut -c1-8)"
+        fi
+        echo "key=mobai-sim-${ImageOS:-mac}-${ImageVersion:-0}-${VER}-${SLUG}${SLIMTAG}-${EXTRA}" >> "$GITHUB_OUTPUT"
 
     - name: Restore simulator cache
       if: inputs.boot-sim == 'true' && runner.os == 'macOS'
@@ -113,13 +134,23 @@ runs:
         CACHE_DIR: ${{ runner.temp }}/mobai-cache
         DT: ${{ inputs.sim-device-type }}
         RT: ${{ inputs.sim-runtime }}
+        SLIM: ${{ inputs.sim-slim }}
       run: |
         set -e
-        UDID=$("$MOBAI_CI_BIN_DIR/mobai-ci" sim boot --cache "$CACHE_DIR" \
-          --device-type "$DT" --runtime "$RT" | tail -1)
+        # A slim boot waits for the simulator to come up (it has to read the
+        # device's state back), so only the plain boot continues in background.
+        if [ -n "$SLIM" ]; then
+          UDID=$("$MOBAI_CI_BIN_DIR/mobai-ci" sim boot --cache "$CACHE_DIR" \
+            --device-type "$DT" --runtime "$RT" --slim "$SLIM" | tail -1)
+          NOTE="slim, ready"
+        else
+          UDID=$("$MOBAI_CI_BIN_DIR/mobai-ci" sim boot --cache "$CACHE_DIR" \
+            --device-type "$DT" --runtime "$RT" | tail -1)
+          NOTE="booting in background"
+        fi
         echo "udid=$UDID" >> "$GITHUB_OUTPUT"
         echo "MOBAI_SIM_UDID=$UDID" >> "$GITHUB_ENV"
-        echo "simulator: $UDID (booting in background)"
+        echo "simulator: $UDID ($NOTE)"
 
     - name: Save simulator cache
       if: inputs.boot-sim == 'true' && runner.os == 'macOS' && steps.simcache.outputs.cache-hit != 'true'

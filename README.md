@@ -129,6 +129,24 @@ than `macos-latest`: the cache is keyed to the runner image, so a silent
 first-run boot times until it rebuilds. iOS simulators take a `.app`;
 mobai-ci repackages it for install.
 
+To run on a slimmed simulator, point `sim-slim` at a committed
+[simslim](https://github.com/MobAI-App/simslim) profile:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: MobAI-App/mobai-ci@v1
+  with:
+    boot-sim: true
+    sim-slim: ./ci/slim.json         # services your tests do not need
+```
+
+The profile is applied once, while the cached image is built, and the image
+keeps it, so later runs restore an already-slim simulator for free. The profile
+joins the cache key, so editing it starts a fresh image rather than reusing the
+old one. Check out your repo first: the path is relative to the workspace. One
+difference from a plain boot: a slim boot does not continue in the background,
+because it reads the simulator's state back before reporting the UDID.
+
 ### Android emulator (free, on the runner)
 
 Same shape on an `ubuntu-latest` runner. The action enables KVM for you.
