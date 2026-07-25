@@ -336,6 +336,28 @@ Key `test` flags (`mobai-ci test --help` for all):
 --wait                        remote: queue for a free device instead of failing
 ```
 
+Key `sim boot` / `sim prepare` flags (macOS, `mobai-ci sim boot --help` for all):
+
+```
+--device-type <model>         simulator model (default "iPhone 16 Pro")
+--runtime <id>                iOS runtime id (default: newest installed)
+--cache <dir>                 reusable simulator image; later runs boot much faster
+--slim <profile.json>         turn off the iOS background services named in a
+                              simslim profile file, so one machine can host
+                              several simulators
+--startup-timeout <dur>       budget for one-time preparation (default 5m)
+```
+
+`--slim` takes a [simslim](https://github.com/MobAI-App/simslim) profile
+(`brew install mobai-app/tap/simslim`, then `simslim profile ./ci/slim.json`).
+The file is required rather than implied by a bare flag: turning services off
+changes what your tests can exercise, and the committed profile is the record of
+what you gave up. The cost is paid once, while the `--cache` image is built, and
+the image keeps it, so later runs restore an already-slim simulator for free.
+One consequence: a copy of a simulator does not inherit the setting, so slim runs
+boot the prepared simulator directly instead of a fresh copy per run, and runs on
+one machine share it (`--app` reinstalls your build either way).
+
 Exit codes: `0` all passed, `1` a test failed, `2` setup/usage error.
 
 ## Examples
