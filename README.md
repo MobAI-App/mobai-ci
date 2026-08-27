@@ -11,6 +11,7 @@ Four ways to get a device, one command to run flows on it:
 |------|--------|--------|------|
 | **iOS simulator** | `macos-15` or newer | booted on the runner | free |
 | **Android emulator** | `ubuntu-latest` | booted on the runner | free |
+| **USB device** | self-hosted macOS or Linux | your iPhone or Android phone on USB | free |
 | **Cloud device farm** | any | real device in BrowserStack / Sauce / AWS | Pro |
 | **BYOD** | any | a device on your own machine, over a tunnel | Pro |
 
@@ -166,6 +167,43 @@ Same shape on an `ubuntu-latest` runner. The action enables KVM for you.
 
 The first run prepares the emulator image (one-time, a few minutes); later runs
 resume from the emulator's Quick Boot snapshot in seconds via the action cache.
+
+### USB device (free, on the runner)
+
+A phone plugged into a self-hosted macOS or Linux runner is a local device:
+`mobai-ci devices` lists it and `mobai-ci test` runs on it, no account needed.
+Android needs nothing else. An iPhone needs the on-device runner signed for that
+phone, and there are two ways to get that:
+
+- **Sign it yourself, headless.** Give mobai-ci a provisioning profile that
+  includes the phone's UDID, plus the certificate and private key it was issued
+  for, and it signs the runner when needed: first run, after a mobai-ci
+  update, when the profile changes. No Apple ID, no 2FA, no desktop app.
+
+  ```sh
+  mobai-ci test ./flows --app build/MyApp.ipa \
+    --sign-profile ci/runner.mobileprovision \
+    --sign-cert ci/cert.pem --sign-key ci/key.pem
+  ```
+
+  The profile must cover the runner's bundle id, `run.mobai.MobAI.xctrunner`,
+  either explicitly or with a wildcard app id. Certificate and key are PEM;
+  from a `.p12`:
+
+  ```sh
+  openssl pkcs12 -in dev.p12 -clcerts -nokeys -out cert.pem
+  openssl pkcs12 -in dev.p12 -nocerts -nodes -out key.pem
+  ```
+
+  In CI, keep the three files as secrets and write them out in a step. The
+  flags also read `MOBAI_SIGN_PROFILE`, `MOBAI_SIGN_CERT` and `MOBAI_SIGN_KEY`.
+
+- **Sign it once with the MobAI desktop app.** Start the bridge on the phone
+  from the app on the same machine; mobai-ci then picks up the signed runner
+  from the app's support directory (`~/.mobai` on Linux,
+  `~/Library/Application Support/mobai` on macOS). A free Apple ID gets a
+  7-day profile, so this needs repeating weekly; a paid membership signs for a
+  year.
 
 ### Cloud device farm (Pro)
 
@@ -345,6 +383,9 @@ Key `test` flags (`mobai-ci test --help` for all):
 --shard i/N                   run shard i of N (tests split round-robin)
 --timeout / --test-timeout    overall / per-test budget (e.g. 20m, 3m)
 --startup-timeout <dur>       on-device runner bring-up budget (default 5m)
+--sign-profile / --sign-cert / --sign-key
+                              USB iPhone: re-sign the on-device runner with your
+                              own identity, offline (env MOBAI_SIGN_*)
 --param K=V                   ${name} substitution in flows (repeatable)
 --allure / --report-bundle    extra report formats alongside JUnit
 --cloud <provider>            run on a farm: browserstack|saucelabs|awsdevicefarm
