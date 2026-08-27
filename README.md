@@ -384,3 +384,11 @@ Exit codes: `0` all passed, `1` a test failed, `2` setup/usage error.
 - [`examples/github-actions-emulator.yml`](./examples/github-actions-emulator.yml) - Android emulator on Linux (local, free)
 - [`examples/github-actions-cloud.yml`](./examples/github-actions-cloud.yml) - cloud device farm (Pro)
 - [`examples/github-actions-byod-tailscale.yml`](./examples/github-actions-byod-tailscale.yml) - your own device over a Tailscale tunnel (Pro)
+
+## License
+
+The files in this repository (the action, `install.sh`, the examples and these
+docs) are MIT licensed, see [LICENSE](./LICENSE).
+
+The `mobai-ci` binaries on the Releases page are closed source and free to use,
+commercially and in CI, under [LICENSE-BINARY.md](./LICENSE-BINARY.md).
