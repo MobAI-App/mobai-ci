@@ -1,9 +1,8 @@
 # MobAI CI - iOS simulator on a GitHub-hosted macOS runner (no tunnel, no host).
 #
-# Self-contained: the action installs mobai-ci and boots a test-ready simulator
-# (cached, so later runs boot fast), the runner builds the app while the
-# simulator comes up, then the flows run. This is the free local path - nothing
-# leaves the runner.
+# Self-contained: the action installs mobai-ci and brings up a slim, test-ready
+# simulator (cached, so later runs boot fast), the runner builds the app, then
+# the flows run. This is the free local path - nothing leaves the runner.
 #
 # Copy into .github/workflows/ in YOUR app repo and adjust the marked lines.
 
