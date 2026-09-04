@@ -1,0 +1,5 @@
+{
+  "name": "ci",
+  "description": "iOS UI test runs. Drops the background services a test never touches; keeps App Store, push and StoreKit, which apps under test often do use.",
+  "except": ["store"]
+}

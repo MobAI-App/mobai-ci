@@ -18,12 +18,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Installs mobai-ci and starts a simulator booting in the background.
-      # Keep this BEFORE the build step: the boot overlaps the build, and the
-      # simulator cache works best before other Xcode tooling runs.
+      # Installs mobai-ci and brings up the simulator. Keep this BEFORE the
+      # build step: the simulator cache works best before other Xcode tooling
+      # runs.
+      #
+      # sim-slim turns off the iOS background services a UI test never touches
+      # (Siri, Spotlight, photo analysis, iCloud sync, widgets, and so on). A
+      # stock simulator holds around 4 GB; a slim one holds under 1 GB, which is
+      # what decides how many fit on a runner before it starts swapping. The
+      # slimming is applied once, into the cached image, so later runs restore
+      # an already-slim simulator.
+      #
+      # Note the trade-off: a slim boot waits here for the simulator to be
+      # ready, so it does not overlap your build the way a plain boot does. Drop
+      # the sim-slim line to get the background boot back. Copy this repo's
+      # examples/slim.json to ci/slim.json and edit it for what your tests need.
       - uses: MobAI-App/mobai-ci@v1
         with:
           boot-sim: true # UDID lands in $MOBAI_SIM_UDID
+          sim-slim: ./ci/slim.json # path is relative to the workspace
 
       # --- Build your app for the simulator (ADJUST scheme / project) ---
       - name: Build app (Debug, simulator)
