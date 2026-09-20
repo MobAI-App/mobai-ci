@@ -87,10 +87,15 @@ runs:
     # shell step. The installed mobai-ci version joins the key so a new release
     # (which may change what preparation puts in the cache) starts fresh.
     #
-    # sim-slim joins it too, and must: the cache is only saved on a miss, so if
-    # an edited profile kept the same key, the restore would hit with the old
-    # image, mobai-ci would build the new one, and the save would be skipped -
-    # leaving every later run to rebuild from scratch, forever.
+    # sim-slim joins it only for mobai-ci older than slimFreeImageVersion. Those
+    # releases bake the slim state into the cached image, so an edited profile
+    # that kept the same key would restore the old image, build the new one, and
+    # skip the save (the cache is only saved on a miss) - leaving every later run
+    # to rebuild from scratch, forever. From 0.6.0 the image carries no slim
+    # state at all (the per-run clone is slimmed offline before its first boot),
+    # so one image serves slim and stock jobs and editing a profile keeps the
+    # cache valid. Keeping the tag for older pins is what makes this safe to
+    # change: they keep their own per-profile caches.
     - name: Compute simulator cache key
       if: inputs.boot-sim == 'true' && runner.os == 'macOS'
       id: simkey
@@ -103,6 +108,8 @@ runs:
         SLIM: ${{ inputs.sim-slim }}
       run: |
         set -e
+        # The first mobai-ci whose cached image is free of slim state.
+        slimFreeImageVersion=0.6.0
         VER=$("$MOBAI_CI_BIN_DIR/mobai-ci" version | awk '{print $2}')
         SLUG=$(echo "$DT-$RT" | tr -c 'A-Za-z0-9.' '-')
         # Empty for a stock boot, so the key stays exactly what earlier versions
@@ -113,7 +120,20 @@ runs:
             echo "sim-slim: no such file: $SLIM (path is relative to the workspace; did you run actions/checkout first?)" >&2
             exit 1
           fi
-          SLIMTAG="-slim$(shasum -a 256 "$SLIM" | cut -c1-8)"
+          # sort -V puts the lower version first, so the installed version is
+          # new enough exactly when the threshold sorts first. Anything that is
+          # not a plain dotted number is treated as old: it keeps the per-profile
+          # key, which is always correct, just less shareable.
+          case "$VER" in
+            ''|*[!0-9.]*) slimFreeImage=no ;;
+            *)
+              oldest=$(printf '%s\n%s\n' "$slimFreeImageVersion" "$VER" | sort -V | head -1)
+              [ "$oldest" = "$slimFreeImageVersion" ] && slimFreeImage=yes || slimFreeImage=no
+              ;;
+          esac
+          if [ "$slimFreeImage" != yes ]; then
+            SLIMTAG="-slim$(shasum -a 256 "$SLIM" | cut -c1-8)"
+          fi
         fi
         echo "key=mobai-sim-${ImageOS:-mac}-${ImageVersion:-0}-${VER}-${SLUG}${SLIMTAG}-${EXTRA}" >> "$GITHUB_OUTPUT"
 
