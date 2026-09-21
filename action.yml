@@ -39,7 +39,7 @@ inputs:
     required: false
     default: "latest"
   sim-slim:
-    description: "Path to a simslim profile file (see https://github.com/MobAI-App/simslim). Turns off the iOS background services it names, so one machine can host several simulators. Applied once, while the cached image is built."
+    description: "Path to a simslim profile file (see https://github.com/MobAI-App/simslim). Turns off the iOS background services it names, so one machine can host several simulators. Applied to each run's simulator before it boots, so an edited profile takes effect on the very next run."
     required: false
     default: ""
   sim-cache-key:
