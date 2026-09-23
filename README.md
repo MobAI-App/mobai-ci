@@ -80,6 +80,50 @@ Common actions: `tap`, `type "text"`, `swipe up|down|left|right`,
 DSL reference (predicates, scrolling-to-find, extraction, parameters) lives in
 the MobAI app docs.
 
+### Workflows: tests as plain text
+
+A `.mobflow` is a test written the way you would tell a tester, one step per
+line. No selectors, no waits: each step is performed on the device by
+Jev, TypeSafe's small model that looks at one screen and does
+one thing, so the test keeps working when a button moves or a label changes.
+
+```
+# flows/onboarding.mobflow
+open the Numbra app
+the onboarding screen is shown with a Continue button
+tap "Continue"
+tap "Continue"
+tap "Try it free"
+the photo picker screen is shown with a "Choose from library" button
+```
+
+Before a step runs, Jev reads the sentence and tells what kind of step it is:
+something to do, something to check, or a sign-in. A check is judged from the
+screen and never acted on, so a failing check fails the run instead of being
+nudged into passing. When a sentence could be read both ways, force it with a
+prefix: `assert: the cart is empty`, `login: sign in as the tester`. Blank lines
+and `#` comments are ignored.
+
+Workflows need a TypeSafe API key in `MOBAI_TYPESAFE_KEY` (or `--jev-key`).
+They run free in CI like everything else local; the device and the key are
+yours. `.mobflow` and `.mob` files can share one directory:
+
+```
+  PASS  smoke.mob            (4.2s)
+  PASS  onboarding.mobflow  (13.1s)  [jev]
+           5.1s  line 1: [act] open the Numbra app
+           0.3s  line 2: [assert] the onboarding screen is shown with a Continue button
+```
+
+A sign-in step may use any credential defined as `MOBAI_SECRET_<NAME>`
+(`MOBAI_SECRET_ADMIN_EMAIL`, `MOBAI_SECRET_ADMIN_PASSWORD`). Jev picks by the
+credential's name and the field's label, so name them the way the step would
+say them. The value is typed on the device and scrubbed from logs, reports and
+saved UI trees; a screenshot can still show an unmasked field. A step gets a
+budget of 8 moves (`--jev-step-budget`): a step that needs more is usually two
+steps. Workflows run on local devices only (simulator, emulator, USB), not on
+cloud farms or BYOD hosts.
+
 ### Parameters
 
 `${name}` placeholders in flows are filled from `--param name=value` (repeatable),
@@ -382,7 +426,9 @@ Key `test` flags (`mobai-ci test --help` for all):
 --output <dir>                report + artifacts dir (default ./mobai-ci-out)
 --shard i/N                   run shard i of N (tests split round-robin)
 --timeout / --test-timeout    overall / per-test budget (e.g. 20m, 3m)
---startup-timeout <dur>       on-device runner bring-up budget (default 5m)
+--startup-timeout <dur>       on-device runner bring-up budget (default 8m)
+--jev-key / --jev-model       workflows: TypeSafe API key (env MOBAI_TYPESAFE_KEY)
+--jev-step-budget <n>         workflows: moves one step may take (default 8)
 --sign-profile / --sign-cert / --sign-key
                               USB iPhone: re-sign the on-device runner with your
                               own identity, offline (env MOBAI_SIGN_*)
@@ -404,7 +450,7 @@ Key `sim boot` / `sim prepare` flags (macOS, `mobai-ci sim boot --help` for all)
 --slim <profile.json>         turn off the iOS background services named in a
                               simslim profile file, so one machine can host
                               several simulators
---startup-timeout <dur>       budget for one-time preparation (default 5m)
+--startup-timeout <dur>       budget for one-time preparation (default 8m)
 ```
 
 `--slim` takes a [simslim](https://github.com/MobAI-App/simslim) profile
@@ -422,6 +468,7 @@ Exit codes: `0` all passed, `1` a test failed, `2` setup/usage error.
 ## Examples
 
 - [`examples/github-actions-simulator.yml`](./examples/github-actions-simulator.yml) - iOS simulator on macOS (local, free)
+- [`examples/github-actions-workflows.yml`](./examples/github-actions-workflows.yml) - plain-text workflows on an iOS simulator (local, free)
 - [`examples/github-actions-emulator.yml`](./examples/github-actions-emulator.yml) - Android emulator on Linux (local, free)
 - [`examples/github-actions-cloud.yml`](./examples/github-actions-cloud.yml) - cloud device farm (Pro)
 - [`examples/github-actions-byod-tailscale.yml`](./examples/github-actions-byod-tailscale.yml) - your own device over a Tailscale tunnel (Pro)

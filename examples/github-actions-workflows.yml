@@ -1,0 +1,52 @@
+# MobAI CI - plain-text workflows (.mobflow) on a GitHub-hosted macOS runner.
+#
+# A workflow is a test written one step per line, in plain words. Each step is
+# performed on the device by Jev, which reads the sentence, tells an action
+# from a check or a sign-in, and does one thing per screen. Nothing is
+# compiled or cached, so there is no artifact to commit and no cache step to
+# add. .mobflow and .mob files can live in the same directory.
+#
+# Copy into .github/workflows/ in YOUR app repo and adjust the marked lines.
+
+name: Mobile workflows (iOS simulator)
+
+on:
+  pull_request:
+
+jobs:
+  workflows:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installs mobai-ci and brings up a test-ready simulator (cached, so
+      # later runs boot fast). Keep this BEFORE the build step.
+      - uses: MobAI-App/mobai-ci@v1
+        with:
+          boot-sim: true # UDID lands in $MOBAI_SIM_UDID
+
+      # --- Build your app for the simulator (ADJUST scheme / project) ---
+      - name: Build app (Debug, simulator)
+        run: |
+          xcodebuild -scheme MyApp \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug -derivedDataPath build build
+          echo "APP_PATH=$(find build/Build/Products -name '*.app' -type d | head -1)" >> "$GITHUB_ENV"
+
+      # MOBAI_TYPESAFE_KEY is the key the steps run on (free in CI: the device
+      # and the key are yours). MOBAI_SECRET_<NAME> defines a credential a
+      # sign-in step may use; name it the way the step would say it.
+      - name: Run workflows
+        env:
+          MOBAI_TYPESAFE_KEY: ${{ secrets.MOBAI_TYPESAFE_KEY }}
+          MOBAI_SECRET_TESTER_EMAIL: ${{ secrets.TESTER_EMAIL }}
+          MOBAI_SECRET_TESTER_PASSWORD: ${{ secrets.TESTER_PASSWORD }}
+        run: |
+          mobai-ci test ./flows --app "$APP_PATH" \
+            --device "$MOBAI_SIM_UDID" --wait-device 4m --output reports
+
+      - uses: actions/upload-artifact@v4
+        if: always() # keep JUnit + failure screenshots/UI-trees even when red
+        with:
+          name: mobai-reports
+          path: reports
