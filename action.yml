@@ -42,6 +42,9 @@ inputs:
     description: "Path to a simslim profile file (see https://github.com/MobAI-App/simslim). Turns off the iOS background services it names, so one machine can host several simulators. Applied to each run's simulator before it boots, so an edited profile takes effect on the very next run."
     required: false
     default: ""
+  sim-slim-only:
+    description: "macOS only: iOS background services to turn off on the simulator, and nothing else: launchd labels or simslim category ids (e.g. widgets). Recommended: widgets, for a faster first boot. Cannot be combined with sim-slim."
+    default: ""
   sim-cache-key:
     description: "Extra cache-key component for the simulator cache; bump to start fresh."
     required: false
@@ -155,11 +158,19 @@ runs:
         DT: ${{ inputs.sim-device-type }}
         RT: ${{ inputs.sim-runtime }}
         SLIM: ${{ inputs.sim-slim }}
+        SLIM_ONLY: ${{ inputs.sim-slim-only }}
       run: |
         set -e
+        if [ -n "$SLIM" ] && [ -n "$SLIM_ONLY" ]; then
+          echo "sim-slim and sim-slim-only cannot be combined" >&2; exit 2
+        fi
         # A slim boot waits for the simulator to come up (it has to read the
         # device's state back), so only the plain boot continues in background.
-        if [ -n "$SLIM" ]; then
+        if [ -n "$SLIM_ONLY" ]; then
+          UDID=$("$MOBAI_CI_BIN_DIR/mobai-ci" sim boot --cache "$CACHE_DIR" \
+            --device-type "$DT" --runtime "$RT" --slim-only "$SLIM_ONLY" | tail -1)
+          NOTE="slim, ready"
+        elif [ -n "$SLIM" ]; then
           UDID=$("$MOBAI_CI_BIN_DIR/mobai-ci" sim boot --cache "$CACHE_DIR" \
             --device-type "$DT" --runtime "$RT" --slim "$SLIM" | tail -1)
           NOTE="slim, ready"

@@ -174,8 +174,21 @@ than `macos-latest`: the cache is keyed to the runner image, so a silent
 first-run boot times until it rebuilds. iOS simulators take a `.app`;
 mobai-ci repackages it for install.
 
-To run on a slimmed simulator, point `sim-slim` at a committed
-[simslim](https://github.com/MobAI-App/simslim) profile:
+Recommended: turn off the simulator's home-screen widget services with
+`sim-slim-only: widgets`. On a freshly booted simulator iOS launches every
+widget and wallpaper extension it ships, which on a small CI runner keeps the
+test runner and your app waiting for minutes; with those services off the
+runner starts in seconds and nothing else about the simulator changes.
+
+```yaml
+- uses: MobAI-App/mobai-ci@v1
+  with:
+    boot-sim: true
+    sim-slim-only: widgets           # recommended: faster, steadier first boot
+```
+
+To turn off more, point `sim-slim` at a committed
+[simslim](https://github.com/MobAI-App/simslim) profile instead:
 
 ```yaml
 - uses: actions/checkout@v4
@@ -447,11 +460,21 @@ Key `sim boot` / `sim prepare` flags (macOS, `mobai-ci sim boot --help` for all)
 --device-type <model>         simulator model (default "iPhone 16 Pro")
 --runtime <id>                iOS runtime id (default: newest installed)
 --cache <dir>                 reusable simulator image; later runs boot much faster
+--slim-only <list>            turn off only these services and leave the rest
+                              running: launchd labels or simslim category ids.
+                              Recommended: --slim-only widgets (faster first boot)
 --slim <profile.json>         turn off the iOS background services named in a
                               simslim profile file, so one machine can host
                               several simulators
 --startup-timeout <dur>       budget for one-time preparation (default 8m)
 ```
+
+`--slim-only widgets` is the recommended setting for CI: a fresh simulator's
+first boot launches every widget and wallpaper extension iOS ships, and on a
+small runner that keeps the test runner and your app waiting for minutes. With
+the widget services off the runner starts in seconds; everything else stays as
+Apple ships it. Use `--slim-only` with launchd labels too
+(`--slim-only com.apple.chronod`).
 
 `--slim` takes a [simslim](https://github.com/MobAI-App/simslim) profile
 (`brew install mobai-app/tap/simslim`, then `simslim profile ./ci/slim.json`).
