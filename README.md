@@ -371,10 +371,54 @@ Optional richer outputs:
 - `--allure` → `<output>/allure-results/`, ready for `allure generate` or an
   Allure TestOps upload. Every `screenshot` step and each failure capture is
   attached to its step.
-- `--report-bundle` → `<output>/run.json` + `artifacts/`, a machine-readable
-  record of the run (cases, steps, timings, attachments) with git and CI context
-  filled in automatically on GitHub Actions and GitLab CI. The `artifacts/` tree
-  holds every step's screenshot and UI tree, not just failures.
+- `--recording` → one screen recording per test in `artifacts/`. Local
+  simulators, emulators and devices only.
+- `--device-logs` → each test's device log (logcat, iOS syslog, simulator log
+  stream) as `artifacts/<test>/device.log`. Local devices only.
+
+Every run also writes `<output>/run.json` + `artifacts/`, a machine-readable
+record of the run (cases, steps, timings, attachments) with git and CI context
+filled in automatically on GitHub Actions and GitLab CI. The `artifacts/` tree
+holds every step's screenshot and UI tree, not just failures. (`--report-bundle`
+used to turn this on; it is still accepted and does nothing.)
+
+## Testing Dashboard
+
+The MobAI app's Testing Dashboard shows your runs over time: pass rate, run
+time, each test's history, and every failure with its screenshot, UI tree and
+logs.
+
+### Share CI runs with your team (Pro)
+
+`--report mobai` uploads the finished run to your team's cloud project, so
+everyone sees CI runs in the dashboard next to the ones shared from the app.
+Link the test folder to a cloud project once in the app (the Testing Dashboard's Cloud tab); it
+writes `mobai.json` next to your tests. Commit that file, and CI uploads to the
+same project:
+
+```yaml
+- name: Run flows
+  env:
+    MOBAI_API_KEY: ${{ secrets.MOBAI_API_KEY }}     # the dashboard's cloud is Pro
+  run: mobai-ci test ./flows --device "$MOBAI_SIM_UDID" --wait-device 4m --output reports --report mobai
+```
+
+Screenshots, UI trees and run records are uploaded with the run, and with
+`--recording` / `--device-logs` the recordings and the end of each failed
+test's device log too. `--project <id>` picks the project when there is no
+`mobai.json`. Without a project the run stops before any test with exit code 2;
+an upload that fails is printed and never changes the exit code.
+
+### Runs from your own machine
+
+`--local-history` (or `MOBAI_LOCAL_HISTORY=1`) adds the run to the MobAI app's
+local history on the same machine, so runs started from a terminal, an editor
+like VS Code or an agent show in the app's Local dashboard. `--output` still
+gets the full run record. Free.
+
+```sh
+mobai-ci test ./flows --local-history
+```
 
 ## Troubleshooting
 
@@ -446,7 +490,15 @@ Key `test` flags (`mobai-ci test --help` for all):
                               USB iPhone: re-sign the on-device runner with your
                               own identity, offline (env MOBAI_SIGN_*)
 --param K=V                   ${name} substitution in flows (repeatable)
---allure / --report-bundle    extra report formats alongside JUnit
+--allure                      Allure results alongside JUnit
+--recording / --device-logs   add screen recordings / device logs to the run record
+--progress                    show each step live as it runs
+--report mobai                upload the run to your team's Testing Dashboard (Pro)
+--project <id>                cloud project for --report mobai (default: mobai.json)
+--local-history               add the run to the app's local history (env MOBAI_LOCAL_HISTORY=1)
+--live / --hold-on-failure <dur>
+                              show the run's device in the MobAI app while it runs,
+                              and keep it open after a failure (Pro)
 --cloud <provider>            run on a farm: browserstack|saucelabs|awsdevicefarm
 --os / --platform / --virtual cloud device selection
 --mobai-addr / --token        remote MobAI host + API token (BYOD)
