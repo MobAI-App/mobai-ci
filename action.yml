@@ -61,6 +61,14 @@ inputs:
     description: "Extra cache-key component for the emulator cache; bump to start fresh."
     required: false
     default: "v1"
+  decision-cache:
+    description: "'true' (default) keeps the workflow agent's decisions between runs, so a screen it has seen before is decided without a call. Restored here, saved when the job succeeds. 'false' turns it off."
+    required: false
+    default: "true"
+  decision-cache-key:
+    description: "Extra cache-key component for the decision cache: set it per matrix entry so parallel jobs keep separate caches, or bump it to start fresh."
+    required: false
+    default: "v1"
 
 outputs:
   sim-udid:
@@ -84,6 +92,33 @@ runs:
       run: |
         sh "$GITHUB_ACTION_PATH/install.sh"
         echo "$MOBAI_CI_BIN_DIR" >> "$GITHUB_PATH"
+
+    # The workflow agent's decisions, kept between runs. Every answer is keyed
+    # on exactly what it was asked, so a cache from another branch can only
+    # answer a screen it has really seen. Each run saves its own copy (run id
+    # in the key) and restores the newest one for this branch, falling back
+    # to any branch. actions/cache saves in its post step, at the end of the
+    # job, and only when the job succeeds. Later mobai-ci steps find the
+    # directory through MOBAI_DECISION_CACHE.
+    - name: Prepare decision cache
+      if: inputs.decision-cache == 'true'
+      shell: bash
+      env:
+        DIR: ${{ runner.temp }}/mobai-decisions
+      run: |
+        mkdir -p "$DIR"
+        echo "MOBAI_DECISION_CACHE=$DIR" >> "$GITHUB_ENV"
+
+    - name: Restore decision cache
+      if: inputs.decision-cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/mobai-decisions
+        key: mobai-decisions-${{ inputs.decision-cache-key }}-${{ github.ref_name }}-${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: |
+          mobai-decisions-${{ inputs.decision-cache-key }}-${{ github.ref_name }}-${{ github.job }}-
+          mobai-decisions-${{ inputs.decision-cache-key }}-${{ github.ref_name }}-
+          mobai-decisions-${{ inputs.decision-cache-key }}-
 
     # ImageOS/ImageVersion are machine env vars on hosted runners; they are NOT
     # visible to ${{ env.* }} inside a composite action, so read them in a

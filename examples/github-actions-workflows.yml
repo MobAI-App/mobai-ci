@@ -3,8 +3,9 @@
 # A workflow is a test written one step per line, in plain words. Each step is
 # performed on the device by Jev, which reads the sentence, tells an action
 # from a check or a sign-in, and does one thing per screen. Nothing is
-# compiled or cached, so there is no artifact to commit and no cache step to
-# add. .mobflow and .mob files can live in the same directory.
+# compiled, so there is no artifact to commit. The setup action keeps Jev's
+# decisions between runs, so a screen it has seen before is decided without a
+# call. .mobflow and .mob files can live in the same directory.
 #
 # Copy into .github/workflows/ in YOUR app repo and adjust the marked lines.
 

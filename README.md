@@ -115,6 +115,28 @@ yours. `.mobflow` and `.mob` files can share one directory:
            0.3s  line 2: [assert] the onboarding screen is shown with a Continue button
 ```
 
+Prefer Cloudflare's open Clef models? Run the same workflows with
+`--workflow-agent clef`, on Cloudflare Workers AI or on your own Clef server:
+
+```bash
+# Cloudflare Workers AI (or set CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN)
+mobai-ci test ./flows --workflow-agent clef \
+  --clef-account-id <account-id> --clef-token <api-token> --clef-model clef-flash
+
+# your own Clef server
+mobai-ci test ./flows --workflow-agent clef \
+  --clef-url https://your-server/v1/systemone \
+  --clef-header "Authorization: Bearer <token>"
+```
+
+The agent's decisions are cached: a screen it has decided before, in this run
+or an earlier one, is answered without a call. With the setup action the
+cache is kept between runs for you (`decision-cache: false` turns that off);
+elsewhere, persist `.mobai/decision-cache` under your test root, or point
+`--decision-cache` / `MOBAI_DECISION_CACHE` at a directory your CI keeps.
+Answers expire after 7 days, and a job that fails does not save its cache.
+`--no-decision-cache` asks for every decision.
+
 A sign-in step may use any credential defined as `MOBAI_SECRET_<NAME>`
 (`MOBAI_SECRET_ADMIN_EMAIL`, `MOBAI_SECRET_ADMIN_PASSWORD`). Jev picks by the
 credential's name and the field's label, so name them the way the step would
@@ -486,6 +508,16 @@ Key `test` flags (`mobai-ci test --help` for all):
 --startup-timeout <dur>       on-device runner bring-up budget (default 8m)
 --jev-key / --jev-model       workflows: TypeSafe API key (env MOBAI_TYPESAFE_KEY)
 --jev-step-budget <n>         workflows: moves one step may take (default 8)
+--workflow-agent jev|clef     workflows: who decides each step (default jev)
+--clef-account-id / --clef-token
+                              workflows: Cloudflare credentials for clef
+                              (env CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN)
+--clef-model clef|clef-flash  workflows: Clef model (default clef)
+--clef-url / --clef-header    workflows: your own Clef server instead of
+                              Cloudflare; header is "Name: value", repeatable
+--decision-cache <dir>        workflows: keep decisions between runs
+                              (env MOBAI_DECISION_CACHE)
+--no-decision-cache           workflows: ask for every decision
 --sign-profile / --sign-cert / --sign-key
                               USB iPhone: re-sign the on-device runner with your
                               own identity, offline (env MOBAI_SIGN_*)
