@@ -37,6 +37,12 @@ curl -fsSL https://mobai.run/ci/install.sh | sh
 Pin a version with `MOBAI_CI_VERSION=x.y.z`. Override the install dir with
 `MOBAI_CI_BIN_DIR`. Supports macOS and Linux (amd64/arm64).
 
+Homebrew (macOS, and Linux on amd64):
+
+```sh
+brew install mobai-app/tap/mobai-ci
+```
+
 ## Write a flow
 
 A flow is a short script of UI steps. MobAI `.mob` is the native format; Maestro
