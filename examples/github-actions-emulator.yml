@@ -1,9 +1,8 @@
 # MobAI CI - Android emulator on a GitHub-hosted Linux runner (no tunnel, no host).
 #
 # Self-contained: the action installs mobai-ci and boots a test-ready emulator
-# (cached, so later runs resume in seconds), the runner builds the app while the
-# emulator comes up, then the flows run. This is the free local path - nothing
-# leaves the runner.
+# (cached, so later runs resume in seconds), the runner builds the app, then the
+# flows run. This is the free local path - nothing leaves the runner.
 #
 # Copy into .github/workflows/ in YOUR app repo and adjust the marked lines.
 
@@ -18,8 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Installs mobai-ci and starts an emulator booting in the background.
-      # Keep this BEFORE the build step: the boot overlaps the build.
+      # Installs mobai-ci and boots the emulator; the step ends once it is up.
       - uses: MobAI-App/mobai-ci@v1
         with:
           boot-emu: true # serial lands in $MOBAI_EMU_SERIAL
@@ -31,7 +29,7 @@ jobs:
           echo "APP_PATH=app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
 
       # Installs the built .apk on the emulator, then runs every flow under
-      # ./flows. --wait-device covers whatever boot time the build didn't.
+      # ./flows.
       - name: Run flows
         run: |
           mobai-ci test ./flows --app "$APP_PATH" \

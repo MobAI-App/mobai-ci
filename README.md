@@ -193,8 +193,8 @@ build your app, run flows.
   run: mobai-ci test ./flows --app "$APP_PATH" --device "$MOBAI_SIM_UDID" --wait-device 4m --output reports
 ```
 
-Put `boot-sim` **before** your build: the simulator boots in the background
-while `xcodebuild` runs, and `--wait-device` absorbs whatever boot time is left.
+Put `boot-sim` **before** your build and any other Xcode step. The step ends
+once the simulator has booted, so `mobai-ci test` can start on it right away.
 The action caches a reusable image, so first-run preparation is paid once and
 later runs boot fast. Pin the runner version (`macos-15`, `macos-26`) rather
 than `macos-latest`: the cache is keyed to the runner image, so a silent
@@ -226,12 +226,11 @@ To turn off more, point `sim-slim` at a committed
     sim-slim: ./ci/slim.json         # services your tests do not need
 ```
 
-The profile is applied once, while the cached image is built, and the image
-keeps it, so later runs restore an already-slim simulator for free. The profile
-joins the cache key, so editing it starts a fresh image rather than reusing the
-old one. Check out your repo first: the path is relative to the workspace. One
-difference from a plain boot: a slim boot does not continue in the background,
-because it reads the simulator's state back before reporting the UDID.
+Check out your repo first: the path is relative to the workspace. Each run
+applies the profile to its own fresh copy of the cached simulator before that
+copy boots, so the copy comes up slim in its one boot. The cached image itself
+stays stock: editing the profile keeps the cache, and slim and stock jobs share
+one image.
 
 ### Android emulator (free, on the runner)
 
@@ -252,6 +251,8 @@ Same shape on an `ubuntu-latest` runner. The action enables KVM for you.
 
 The first run prepares the emulator image (one-time, a few minutes); later runs
 resume from the emulator's Quick Boot snapshot in seconds via the action cache.
+On a small runner that first boot can take longer than the 10 minutes it gets
+by default; give it more with `emu-startup-timeout: 20m`.
 
 ### USB device (free, on the runner)
 
@@ -570,11 +571,10 @@ Apple ships it. Use `--slim-only` with launchd labels too
 (`brew install mobai-app/tap/simslim`, then `simslim profile ./ci/slim.json`).
 The file is required rather than implied by a bare flag: turning services off
 changes what your tests can exercise, and the committed profile is the record of
-what you gave up. The cost is paid once, while the `--cache` image is built, and
-the image keeps it, so later runs restore an already-slim simulator for free.
-One consequence: a copy of a simulator does not inherit the setting, so slim runs
-boot the prepared simulator directly instead of a fresh copy per run, and runs on
-one machine share it (`--app` reinstalls your build either way).
+what you gave up. Each run applies it to its fresh copy of the prepared
+simulator while that copy is still shut down, so the copy comes up slim in its
+first boot. The `--cache` image carries no slim state: editing the profile keeps
+it valid, and slim and stock jobs can share one cache.
 
 Exit codes: `0` all passed, `1` a test failed, `2` setup/usage error.
 

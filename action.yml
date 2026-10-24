@@ -57,6 +57,10 @@ inputs:
     description: "Android API level for boot-emu (default 35)."
     required: false
     default: "35"
+  emu-startup-timeout:
+    description: "How long boot-emu may take to boot the emulator and prepare its image (e.g. 20m). Default: mobai-ci's own, 10m. Raise it for small runners, where a first boot can take longer."
+    required: false
+    default: ""
   emu-cache-key:
     description: "Extra cache-key component for the emulator cache; bump to start fresh."
     required: false
@@ -267,10 +271,11 @@ runs:
         MOBAI_CI_BIN_DIR: ${{ runner.temp }}/mobai-ci-bin
         CACHE_DIR: ${{ runner.temp }}/mobai-emu-cache
         API: ${{ inputs.emu-api }}
+        TIMEOUT: ${{ inputs.emu-startup-timeout }}
       run: |
         set -e
         SERIAL=$("$MOBAI_CI_BIN_DIR/mobai-ci" emu boot --cache "$CACHE_DIR" \
-          --api "$API" | tail -1)
+          --api "$API" ${TIMEOUT:+--startup-timeout "$TIMEOUT"} | tail -1)
         echo "serial=$SERIAL" >> "$GITHUB_OUTPUT"
         echo "MOBAI_EMU_SERIAL=$SERIAL" >> "$GITHUB_ENV"
         echo "emulator: $SERIAL (booting in background)"

@@ -17,20 +17,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Installs mobai-ci and brings up the simulator. Keep this BEFORE the
-      # build step: the simulator cache works best before other Xcode tooling
-      # runs.
+      # Installs mobai-ci and boots the simulator; the step ends once it is up.
+      # Keep this BEFORE the build step: the simulator cache works best before
+      # other Xcode tooling runs.
       #
       # sim-slim turns off the iOS background services a UI test never touches
       # (Siri, Spotlight, photo analysis, iCloud sync, widgets, and so on). A
       # stock simulator holds around 4 GB; a slim one holds under 1 GB, which is
-      # what decides how many fit on a runner before it starts swapping. The
-      # slimming is applied once, into the cached image, so later runs restore
-      # an already-slim simulator.
+      # what decides how many fit on a runner before it starts swapping. Each
+      # run applies the profile to its own fresh copy of the cached simulator
+      # before that copy boots, so it costs nothing beyond the boot, and
+      # editing the profile keeps the cache.
       #
-      # Note the trade-off: a slim boot waits here for the simulator to be
-      # ready, so it does not overlap your build the way a plain boot does. Drop
-      # the sim-slim line to get the background boot back. Copy this repo's
+      # Drop the sim-slim line for a stock simulator. Copy this repo's
       # examples/slim.json to ci/slim.json and edit it for what your tests need.
       - uses: MobAI-App/mobai-ci@v1
         with:
@@ -46,7 +45,7 @@ jobs:
           echo "APP_PATH=$(find build/Build/Products -name '*.app' -type d | head -1)" >> "$GITHUB_ENV"
 
       # Installs the built .app on the simulator, then runs every flow under
-      # ./flows. --wait-device covers whatever boot time the build didn't.
+      # ./flows.
       - name: Run flows
         run: |
           mobai-ci test ./flows --app "$APP_PATH" \
